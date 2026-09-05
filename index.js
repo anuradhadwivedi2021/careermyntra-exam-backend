@@ -10,6 +10,7 @@ const pool = require('./config/db');
 const reportRoutes = require('./routes/reportRoutes');
 const app = express();
 const adminAuthRoutes = require('./routes/adminAuthRoutes');
+const registrationRoutes = require('./routes/registrationRoutes');
 
 app.use(cors({ origin: process.env.FRONTEND_URL }));
 app.use(express.json());
@@ -41,6 +42,9 @@ app.use('/api/admin-auth', adminAuthRoutes);
 // Attempt routes
 app.use('/api/attempts', attemptRoutes);
 app.use('/api/reports', reportRoutes);
+
+// Exam registration routes
+app.use('/api/registrations', registrationRoutes);
 
 const PORT = process.env.PORT || 5001;
 app.listen(PORT, () => {

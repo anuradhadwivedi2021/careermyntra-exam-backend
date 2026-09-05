@@ -16,6 +16,14 @@ exports.startAttempt = async (req, res) => {
     }
     const exam = examResult.rows[0];
 
+    const registration = await pool.query(
+      'SELECT registration_id FROM exam_registrations WHERE candidate_id = $1 AND exam_id = $2',
+      [candidate_id, exam_id]
+    );
+    if (registration.rows.length === 0) {
+      return res.status(403).json({ success: false, message: 'Please register for this exam before starting it' });
+    }
+
     const pastAttempts = await pool.query(
       'SELECT COUNT(*) FROM exam_attempts WHERE candidate_id = $1 AND exam_id = $2',
       [candidate_id, exam_id]
