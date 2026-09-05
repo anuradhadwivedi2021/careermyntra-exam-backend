@@ -9,6 +9,7 @@ const attemptRoutes = require('./routes/attemptRoutes');
 const pool = require('./config/db');
 const reportRoutes = require('./routes/reportRoutes');
 const app = express();
+const adminAuthRoutes = require('./routes/adminAuthRoutes');
 
 app.use(cors({ origin: process.env.FRONTEND_URL }));
 app.use(express.json());
@@ -35,6 +36,7 @@ app.use('/api/auth', authRoutes);
 // Exam & Question routes
 app.use('/api/exams', examRoutes);
 app.use('/api/questions', questionRoutes);
+app.use('/api/admin-auth', adminAuthRoutes);
 
 // Attempt routes
 app.use('/api/attempts', attemptRoutes);
