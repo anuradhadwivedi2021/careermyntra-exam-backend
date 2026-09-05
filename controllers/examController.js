@@ -1,6 +1,6 @@
 const pool = require('../config/db');
 
-// Admin: create exam (no auth for now, admin auth aayega baad mein)
+// Admin: create exam
 exports.createExam = async (req, res) => {
   const {
     exam_name, description, instructions, duration_minutes,
@@ -53,6 +53,75 @@ exports.getExamById = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Exam not found' });
     }
     res.json({ success: true, exam: result.rows[0] });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, message: 'Server error', error: err.message });
+  }
+};
+
+// Admin: update exam
+exports.updateExam = async (req, res) => {
+  const { exam_id } = req.params;
+  const {
+    exam_name, description, instructions, duration_minutes,
+    total_marks, passing_marks, negative_marking,
+    negative_marks_per_question, attempt_limit, is_free, status
+  } = req.body;
+
+  try {
+    const result = await pool.query(
+      `UPDATE exams SET
+        exam_name = COALESCE($1, exam_name),
+        description = COALESCE($2, description),
+        instructions = COALESCE($3, instructions),
+        duration_minutes = COALESCE($4, duration_minutes),
+        total_marks = COALESCE($5, total_marks),
+        passing_marks = COALESCE($6, passing_marks),
+        negative_marking = COALESCE($7, negative_marking),
+        negative_marks_per_question = COALESCE($8, negative_marks_per_question),
+        attempt_limit = COALESCE($9, attempt_limit),
+        is_free = COALESCE($10, is_free),
+        status = COALESCE($11, status),
+        updated_at = NOW()
+       WHERE exam_id = $12
+       RETURNING *`,
+      [exam_name, description, instructions, duration_minutes, total_marks, passing_marks,
+       negative_marking, negative_marks_per_question, attempt_limit, is_free, status, exam_id]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ success: false, message: 'Exam not found' });
+    }
+    res.json({ success: true, exam: result.rows[0] });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, message: 'Server error', error: err.message });
+  }
+};
+
+// Admin: delete exam
+exports.deleteExam = async (req, res) => {
+  const { exam_id } = req.params;
+  try {
+    const result = await pool.query('DELETE FROM exams WHERE exam_id = $1 RETURNING exam_id', [exam_id]);
+    if (result.rows.length === 0) {
+      return res.status(404).json({ success: false, message: 'Exam not found' });
+    }
+    res.json({ success: true, message: 'Exam deleted' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, message: 'Server error', error: err.message });
+  }
+};
+
+// Admin: list ALL exams (including drafts) - for admin dashboard
+exports.listAllExamsForAdmin = async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT exam_id, exam_name, description, duration_minutes, total_marks,
+              passing_marks, is_free, status, attempt_limit, created_at
+       FROM exams ORDER BY created_at DESC`
+    );
+    res.json({ success: true, exams: result.rows });
   } catch (err) {
     console.error(err);
     res.status(500).json({ success: false, message: 'Server error', error: err.message });

@@ -64,3 +64,55 @@ exports.getQuestionsByExam = async (req, res) => {
     res.status(500).json({ success: false, message: 'Server error', error: err.message });
   }
 };
+
+// Admin: bulk add questions (from CSV/Excel parsed on frontend)
+exports.bulkAddQuestions = async (req, res) => {
+  const { exam_id, questions } = req.body;
+
+  if (!exam_id || !Array.isArray(questions) || questions.length === 0) {
+    return res.status(400).json({ success: false, message: 'exam_id and a non-empty questions array are required' });
+  }
+
+  const client = await pool.connect();
+  let addedCount = 0;
+  const errors = [];
+
+  try {
+    await client.query('BEGIN');
+
+    for (let i = 0; i < questions.length; i++) {
+      const q = questions[i];
+      if (!q.question_text || !q.options || q.options.length < 2) {
+        errors.push(`Row ${i + 1}: missing question_text or options`);
+        continue;
+      }
+
+      const qResult = await client.query(
+        `INSERT INTO questions (exam_id, question_text, subject, topic, difficulty, marks, negative_marks, explanation)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING question_id`,
+        [exam_id, q.question_text, q.subject || null, q.topic || null, q.difficulty || 'medium',
+         q.marks || 1, q.negative_marks || 0, q.explanation || null]
+      );
+      const question_id = qResult.rows[0].question_id;
+
+      for (let j = 0; j < q.options.length; j++) {
+        const opt = q.options[j];
+        await client.query(
+          `INSERT INTO question_options (question_id, option_text, is_correct, option_order)
+           VALUES ($1,$2,$3,$4)`,
+          [question_id, opt.option_text, opt.is_correct || false, j + 1]
+        );
+      }
+      addedCount++;
+    }
+
+    await client.query('COMMIT');
+    res.status(201).json({ success: true, message: `${addedCount} questions added`, added: addedCount, errors });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error(err);
+    res.status(500).json({ success: false, message: 'Server error', error: err.message });
+  } finally {
+    client.release();
+  }
+};
