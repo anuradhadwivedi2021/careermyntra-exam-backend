@@ -11,6 +11,7 @@ const reportRoutes = require('./routes/reportRoutes');
 const app = express();
 const adminAuthRoutes = require('./routes/adminAuthRoutes');
 const registrationRoutes = require('./routes/registrationRoutes');
+const paymentRoutes = require('./routes/paymentRoutes');
 
 app.use(cors({ origin: process.env.FRONTEND_URL }));
 app.use(express.json());
@@ -45,6 +46,9 @@ app.use('/api/reports', reportRoutes);
 
 // Exam registration routes
 app.use('/api/registrations', registrationRoutes);
+
+// Payment routes
+app.use('/api/payments', paymentRoutes);
 
 const PORT = process.env.PORT || 5001;
 app.listen(PORT, () => {

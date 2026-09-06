@@ -11,7 +11,7 @@ exports.registerForExam = async (req, res) => {
 
   try {
     const examResult = await pool.query(
-      `SELECT exam_id, status, start_datetime, end_datetime FROM exams WHERE exam_id = $1`,
+      `SELECT exam_id, status, is_free, price, start_datetime, end_datetime FROM exams WHERE exam_id = $1`,
       [exam_id]
     );
     if (examResult.rows.length === 0) {
@@ -20,6 +20,9 @@ exports.registerForExam = async (req, res) => {
     const exam = examResult.rows[0];
     if (exam.status !== 'published') {
       return res.status(400).json({ success: false, message: 'This exam is not open for registration' });
+    }
+    if (!exam.is_free && Number(exam.price) > 0) {
+      return res.status(400).json({ success: false, message: 'This is a paid exam — complete payment to register' });
     }
     if (exam.end_datetime && new Date() > new Date(exam.end_datetime)) {
       return res.status(400).json({ success: false, message: 'Registration for this exam has closed' });

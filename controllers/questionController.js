@@ -2,10 +2,14 @@ const pool = require('../config/db');
 
 // Admin: add a question with options
 exports.addQuestion = async (req, res) => {
-  const { exam_id, question_text, subject, topic, difficulty, marks, negative_marks, explanation, options } = req.body;
+  const { exam_id, question_text, subject, topic, difficulty, marks, negative_marks, explanation, options, question_type, word_limit } = req.body;
+  const qType = question_type === 'subjective' ? 'subjective' : 'mcq';
 
-  if (!exam_id || !question_text || !options || options.length < 2) {
-    return res.status(400).json({ success: false, message: 'exam_id, question_text and at least 2 options are required' });
+  if (!exam_id || !question_text) {
+    return res.status(400).json({ success: false, message: 'exam_id and question_text are required' });
+  }
+  if (qType === 'mcq' && (!options || options.length < 2)) {
+    return res.status(400).json({ success: false, message: 'MCQ questions need at least 2 options' });
   }
 
   const client = await pool.connect();
@@ -13,19 +17,22 @@ exports.addQuestion = async (req, res) => {
     await client.query('BEGIN');
 
     const qResult = await client.query(
-      `INSERT INTO questions (exam_id, question_text, subject, topic, difficulty, marks, negative_marks, explanation)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING question_id`,
-      [exam_id, question_text, subject || null, topic || null, difficulty || 'medium', marks || 1, negative_marks || 0, explanation || null]
+      `INSERT INTO questions (exam_id, question_text, subject, topic, difficulty, marks, negative_marks, explanation, question_type, word_limit)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING question_id`,
+      [exam_id, question_text, subject || null, topic || null, difficulty || 'medium', marks || 1,
+       negative_marks || 0, explanation || null, qType, qType === 'subjective' ? (word_limit || null) : null]
     );
     const question_id = qResult.rows[0].question_id;
 
-    for (let i = 0; i < options.length; i++) {
-      const opt = options[i];
-      await client.query(
-        `INSERT INTO question_options (question_id, option_text, is_correct, option_order)
-         VALUES ($1,$2,$3,$4)`,
-        [question_id, opt.option_text, opt.is_correct || false, i + 1]
-      );
+    if (qType === 'mcq') {
+      for (let i = 0; i < options.length; i++) {
+        const opt = options[i];
+        await client.query(
+          `INSERT INTO question_options (question_id, option_text, is_correct, option_order)
+           VALUES ($1,$2,$3,$4)`,
+          [question_id, opt.option_text, opt.is_correct || false, i + 1]
+        );
+      }
     }
 
     await client.query('COMMIT');
@@ -44,12 +51,15 @@ exports.getQuestionsByExam = async (req, res) => {
   const { exam_id } = req.params;
   try {
     const questions = await pool.query(
-      `SELECT question_id, question_text, subject, topic, marks FROM questions WHERE exam_id = $1 ORDER BY question_id`,
+      `SELECT question_id, question_text, subject, topic, marks, question_type, word_limit FROM questions WHERE exam_id = $1 ORDER BY question_id`,
       [exam_id]
     );
 
     const questionsWithOptions = await Promise.all(
       questions.rows.map(async (q) => {
+        if (q.question_type === 'subjective') {
+          return { ...q, options: [] };
+        }
         const options = await pool.query(
           `SELECT option_id, option_text FROM question_options WHERE question_id = $1 ORDER BY option_order`,
           [q.question_id]
@@ -82,26 +92,29 @@ exports.bulkAddQuestions = async (req, res) => {
 
     for (let i = 0; i < questions.length; i++) {
       const q = questions[i];
-      if (!q.question_text || !q.options || q.options.length < 2) {
+      const qType = q.question_type === 'subjective' ? 'subjective' : 'mcq';
+      if (!q.question_text || (qType === 'mcq' && (!q.options || q.options.length < 2))) {
         errors.push(`Row ${i + 1}: missing question_text or options`);
         continue;
       }
 
       const qResult = await client.query(
-        `INSERT INTO questions (exam_id, question_text, subject, topic, difficulty, marks, negative_marks, explanation)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING question_id`,
+        `INSERT INTO questions (exam_id, question_text, subject, topic, difficulty, marks, negative_marks, explanation, question_type, word_limit)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING question_id`,
         [exam_id, q.question_text, q.subject || null, q.topic || null, q.difficulty || 'medium',
-         q.marks || 1, q.negative_marks || 0, q.explanation || null]
+         q.marks || 1, q.negative_marks || 0, q.explanation || null, qType, qType === 'subjective' ? (q.word_limit || null) : null]
       );
       const question_id = qResult.rows[0].question_id;
 
-      for (let j = 0; j < q.options.length; j++) {
-        const opt = q.options[j];
-        await client.query(
-          `INSERT INTO question_options (question_id, option_text, is_correct, option_order)
-           VALUES ($1,$2,$3,$4)`,
-          [question_id, opt.option_text, opt.is_correct || false, j + 1]
-        );
+      if (qType === 'mcq') {
+        for (let j = 0; j < q.options.length; j++) {
+          const opt = q.options[j];
+          await client.query(
+            `INSERT INTO question_options (question_id, option_text, is_correct, option_order)
+             VALUES ($1,$2,$3,$4)`,
+            [question_id, opt.option_text, opt.is_correct || false, j + 1]
+          );
+        }
       }
       addedCount++;
     }
