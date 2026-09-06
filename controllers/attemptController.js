@@ -136,11 +136,29 @@ exports.submitAttempt = async (req, res) => {
       [totalScore, percentage, attempt_id]
     );
 
-    await client.query(
+    const insertedResult = await client.query(
       `INSERT INTO results
         (attempt_id, candidate_id, exam_id, total_questions, correct_count, incorrect_count, unattempted_count, total_score, percentage)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+       RETURNING result_id`,
       [attempt_id, candidate_id, attempt.exam_id, allQuestions.rows.length, correctCount, incorrectCount, unattemptedCount, totalScore, percentage]
+    );
+
+    // Recompute rank for every candidate on this exam (highest score = rank 1)
+    await client.query(
+      `UPDATE results r
+       SET rank = ranked.rnk
+       FROM (
+         SELECT result_id, RANK() OVER (ORDER BY total_score DESC) AS rnk
+         FROM results WHERE exam_id = $1
+       ) ranked
+       WHERE r.result_id = ranked.result_id`,
+      [attempt.exam_id]
+    );
+
+    const myRank = await client.query(
+      'SELECT rank FROM results WHERE result_id = $1',
+      [insertedResult.rows[0].result_id]
     );
 
     await client.query('COMMIT');
@@ -154,7 +172,8 @@ exports.submitAttempt = async (req, res) => {
         incorrect_count: incorrectCount,
         unattempted_count: unattemptedCount,
         total_score: totalScore,
-        percentage: percentage.toFixed(2)
+        percentage: percentage.toFixed(2),
+        rank: myRank.rows[0].rank
       }
     });
   } catch (err) {

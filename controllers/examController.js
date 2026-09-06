@@ -5,7 +5,7 @@ exports.createExam = async (req, res) => {
   const {
     exam_name, description, instructions, duration_minutes,
     total_marks, passing_marks, negative_marking,
-    negative_marks_per_question, attempt_limit, is_free
+    negative_marks_per_question, attempt_limit, is_free, price
   } = req.body;
 
   if (!exam_name || !duration_minutes || !total_marks) {
@@ -16,11 +16,12 @@ exports.createExam = async (req, res) => {
     const result = await pool.query(
       `INSERT INTO exams
         (exam_name, description, instructions, duration_minutes, total_marks, passing_marks,
-         negative_marking, negative_marks_per_question, attempt_limit, is_free, status)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'published')
+         negative_marking, negative_marks_per_question, attempt_limit, is_free, price, status)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'published')
        RETURNING *`,
       [exam_name, description, instructions, duration_minutes, total_marks, passing_marks || null,
-       negative_marking || false, negative_marks_per_question || 0, attempt_limit || 1, is_free !== false]
+       negative_marking || false, negative_marks_per_question || 0, attempt_limit || 1, is_free !== false,
+       is_free === false ? (price || 0) : 0]
     );
     res.status(201).json({ success: true, exam: result.rows[0] });
   } catch (err) {
@@ -34,7 +35,7 @@ exports.listExams = async (req, res) => {
   try {
     const result = await pool.query(
       `SELECT exam_id, exam_name, description, duration_minutes, total_marks,
-              passing_marks, is_free, status, start_datetime, end_datetime
+              passing_marks, is_free, price, status, start_datetime, end_datetime
        FROM exams WHERE status = 'published' ORDER BY created_at DESC`
     );
     res.json({ success: true, exams: result.rows });
@@ -65,7 +66,7 @@ exports.updateExam = async (req, res) => {
   const {
     exam_name, description, instructions, duration_minutes,
     total_marks, passing_marks, negative_marking,
-    negative_marks_per_question, attempt_limit, is_free, status
+    negative_marks_per_question, attempt_limit, is_free, price, status
   } = req.body;
 
   try {
@@ -81,12 +82,13 @@ exports.updateExam = async (req, res) => {
         negative_marks_per_question = COALESCE($8, negative_marks_per_question),
         attempt_limit = COALESCE($9, attempt_limit),
         is_free = COALESCE($10, is_free),
-        status = COALESCE($11, status),
+        price = COALESCE($11, price),
+        status = COALESCE($12, status),
         updated_at = NOW()
-       WHERE exam_id = $12
+       WHERE exam_id = $13
        RETURNING *`,
       [exam_name, description, instructions, duration_minutes, total_marks, passing_marks,
-       negative_marking, negative_marks_per_question, attempt_limit, is_free, status, exam_id]
+       negative_marking, negative_marks_per_question, attempt_limit, is_free, price, status, exam_id]
     );
     if (result.rows.length === 0) {
       return res.status(404).json({ success: false, message: 'Exam not found' });
