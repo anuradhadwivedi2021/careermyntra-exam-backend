@@ -3,10 +3,22 @@ const Razorpay = require('razorpay');
 const pool = require('../config/db');
 const { checkEligibility } = require('../services/eligibilityService');
 
-const razorpay = new Razorpay({
-  key_id: process.env.RAZORPAY_KEY_ID,
-  key_secret: process.env.RAZORPAY_KEY_SECRET,
-});
+// Lazy-initialized — created only when a payment is actually attempted,
+// not when this file is first loaded. This way the server doesn't crash
+// on startup just because Razorpay keys aren't configured yet.
+let razorpay = null;
+function getRazorpay() {
+  if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) {
+    throw new Error('Payment gateway is not configured yet (RAZORPAY_KEY_ID/RAZORPAY_KEY_SECRET missing)');
+  }
+  if (!razorpay) {
+    razorpay = new Razorpay({
+      key_id: process.env.RAZORPAY_KEY_ID,
+      key_secret: process.env.RAZORPAY_KEY_SECRET,
+    });
+  }
+  return razorpay;
+}
 
 // Candidate: create a Razorpay order for a paid exam
 exports.createOrder = async (req, res) => {
@@ -93,7 +105,7 @@ exports.createOrder = async (req, res) => {
 
     const amountInPaise = Math.round(amount * 100);
 
-    const order = await razorpay.orders.create({
+    const order = await getRazorpay().orders.create({
       amount: amountInPaise,
       currency: 'INR',
       receipt: `exam_${exam_id}_cand_${candidate_id}_${Date.now()}`,
